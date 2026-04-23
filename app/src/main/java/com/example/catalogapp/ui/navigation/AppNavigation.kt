@@ -1,42 +1,53 @@
 package com.example.catalogapp.ui.navigation
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.catalogapp.ui.screens.CartScreen
 import com.example.catalogapp.ui.screens.CatalogScreen
+import com.example.catalogapp.viewmodel.CartViewModel
 import com.example.catalogapp.viewmodel.CatalogState
 import com.example.catalogapp.viewmodel.CatalogViewModel
 
 @Composable
 fun AppNavigation() {
-    val navController = rememberNavController()
-    val viewModel: CatalogViewModel = viewModel()
+    val navController                      = rememberNavController()
+    val catalogViewModel: CatalogViewModel = viewModel()
+    val cartViewModel: CartViewModel       = viewModel()
 
-    NavHost(
-        navController = navController,
-        startDestination = "catalog"
-    ) {
+    NavHost(navController = navController, startDestination = "catalog") {
+
         composable("catalog") {
-            val state = viewModel.state
-
-            when (state) {
+            when (val state = catalogViewModel.state) {
                 is CatalogState.Loading -> {
-                    // Pantalla de carga simple
-                    androidx.compose.material3.CircularProgressIndicator()
+                    Box(
+                        modifier         = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
                 }
                 is CatalogState.Error -> {
-                    androidx.compose.material3.Text(text = state.message)
+                    Box(
+                        modifier         = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(text = state.message)
+                    }
                 }
                 is CatalogState.Success -> {
                     CatalogScreen(
-                        products = state.products,
-                        onProductClick = { /* navegar a detalle si tienes */ },
-                        onCartClick = {
-                            navController.navigate("cart")
-                        }
+                        products    = state.products,
+                        onCartClick = { navController.navigate("cart") },
+                        onAddToCart = { productId -> cartViewModel.addProduct(productId) }
                     )
                 }
             }
@@ -44,12 +55,9 @@ fun AppNavigation() {
 
         composable("cart") {
             CartScreen(
-                onBackClick = {
-                    navController.popBackStack()
-                },
-                onCheckoutClick = {
-                    // navegar a checkout cuando lo tengas
-                }
+                viewModel       = cartViewModel,
+                onBackClick     = { navController.popBackStack() },
+                onCheckoutClick = {}
             )
         }
     }

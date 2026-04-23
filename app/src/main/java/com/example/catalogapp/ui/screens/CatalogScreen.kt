@@ -42,9 +42,6 @@ import coil.compose.AsyncImage
 import com.example.catalogapp.model.Product
 import com.example.catalogapp.ui.theme.*
 
-// ──────────────────────────────────────────────
-//  Data helpers
-// ──────────────────────────────────────────────
 
 private val sampleProducts = listOf(
     Product(1, "Oak Lounge Chair",   840.00,  "Minimalist lounge chair in solid oak.",       "Furniture"),
@@ -57,7 +54,6 @@ private val sampleProducts = listOf(
 
 private val categories = listOf("All", "New Arrivals", "Furniture", "Decor", "Lighting")
 
-// Image placeholder URLs mapped by product id (replace with your actual sources)
 private val productImageUrls = mapOf(
     1 to "https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?w=400",
     2 to "https://images.unsplash.com/photo-1612196808214-b8e1d6145a8c?w=400",
@@ -87,6 +83,7 @@ fun CatalogScreen(
     products: List<Product> = sampleProducts,
     onProductClick: (Product) -> Unit = {},
     onCartClick: () -> Unit = {},
+    onAddToCart: (Int) -> Unit = {}
 ) {
     var selectedCategory by remember { mutableStateOf("All") }
     var selectedNavItem  by remember { mutableIntStateOf(1) } // 1 = Catalog
@@ -143,6 +140,7 @@ fun CatalogScreen(
                     imageUrl = productImageUrls[product.id] ?: "",
                     brand    = productBrands[product.id]    ?: "",
                     onClick  = { onProductClick(product) },
+                    onAddToCart = { onAddToCart(product.id) }
                 )
             }
         }
@@ -299,16 +297,13 @@ private fun CategoryChipRow(
     }
 }
 
-// ──────────────────────────────────────────────
-//  Product Card
-// ──────────────────────────────────────────────
-
 @Composable
 fun ProductCard(
-    product : Product,
+    product: Product,
     imageUrl: String,
-    brand   : String,
-    onClick : () -> Unit,
+    brand: String,
+    onClick: () -> Unit,
+    onAddToCart: () -> Unit = {},   // ✅ NUEVO
     modifier: Modifier = Modifier,
 ) {
     var isFavorite by remember { mutableStateOf(false) }
@@ -317,6 +312,8 @@ fun ProductCard(
         animationSpec = tween(150),
         label         = "heartScale",
     )
+    // ✅ Estado para mostrar confirmación
+    var addedToCart by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -327,7 +324,7 @@ fun ProductCard(
                 onClick           = onClick,
             ),
     ) {
-        // ── Image with favourite button ──────────
+        // ── Imagen con botón favorito ────────────────────────────────────
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -336,13 +333,12 @@ fun ProductCard(
                 .background(BoutiqueSurface),
         ) {
             AsyncImage(
-                model             = imageUrl,
+                model              = imageUrl,
                 contentDescription = product.title,
-                contentScale      = ContentScale.Crop,
-                modifier          = Modifier.fillMaxSize(),
+                contentScale       = ContentScale.Crop,
+                modifier           = Modifier.fillMaxSize(),
             )
 
-            // Subtle gradient overlay at bottom
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -356,7 +352,7 @@ fun ProductCard(
                     ),
             )
 
-            // Heart button
+            // Botón corazón
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -376,28 +372,50 @@ fun ProductCard(
                     contentDescription = "Favourite",
                     tint               = if (isFavorite) Color(0xFFB05050)
                     else BoutiqueTextPrimary,
-                    modifier           = Modifier
-                        .size(16.dp)
-                        .scale(heartScale),
+                    modifier           = Modifier.size(16.dp).scale(heartScale),
+                )
+            }
+
+            // ✅ Botón "+" agregar al carrito (esquina inferior derecha)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(8.dp)
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(if (addedToCart) BoutiqueDarkGreen else White80)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication        = null,
+                    ) {
+                        onAddToCart()
+                        addedToCart = true
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector        = if (addedToCart) Icons.Filled.ShoppingCart
+                    else Icons.Default.ShoppingCart,
+                    contentDescription = "Agregar al carrito",
+                    tint               = if (addedToCart) Color.White else BoutiqueTextPrimary,
+                    modifier           = Modifier.size(16.dp),
                 )
             }
         }
 
         Spacer(Modifier.height(8.dp))
 
-        // ── Brand label ──────────────────────────
         Text(
             text  = brand,
             style = MaterialTheme.typography.labelSmall.copy(
-                color        = BoutiqueTextSecondary,
+                color         = BoutiqueTextSecondary,
                 letterSpacing = 1.5.sp,
-                fontSize     = 10.sp,
+                fontSize      = 10.sp,
             ),
         )
 
         Spacer(Modifier.height(2.dp))
 
-        // ── Product title ────────────────────────
         Text(
             text     = product.title,
             style    = MaterialTheme.typography.bodyMedium.copy(
@@ -411,7 +429,6 @@ fun ProductCard(
 
         Spacer(Modifier.height(2.dp))
 
-        // ── Price ────────────────────────────────
         Text(
             text  = "${"$"}${"%.2f".format(product.price)}",
             style = MaterialTheme.typography.bodySmall.copy(
@@ -421,10 +438,6 @@ fun ProductCard(
         )
     }
 }
-
-// ──────────────────────────────────────────────
-//  Bottom Navigation Bar
-// ──────────────────────────────────────────────
 
 private data class NavItem(
     val label   : String,
