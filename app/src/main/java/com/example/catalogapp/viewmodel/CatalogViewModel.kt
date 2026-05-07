@@ -1,25 +1,28 @@
 package com.example.catalogapp.viewmodel
 
+import android.app.Application
 import androidx.compose.runtime.*
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.catalogapp.data.network.NotificationHelper
 import com.example.catalogapp.data.network.RetrofitClient
 import com.example.catalogapp.data.repository.ProductRepository
 import com.example.catalogapp.model.Product
 import kotlinx.coroutines.launch
 
-class CatalogViewModel : ViewModel() {
+class CatalogViewModel(application: Application) : AndroidViewModel(application) {
     var state: CatalogState by mutableStateOf(CatalogState.Loading)
         private set
 
     private val repository = ProductRepository(RetrofitClient.apiService)
+    private val notificationHelper = NotificationHelper(application)
 
     init {
         loadProducts()
     }
 
     fun loadProducts() {
-        viewModelScope.launch{
+        viewModelScope.launch {
             state = CatalogState.Loading
             try {
                 val list = repository.fetchAllProducts()
@@ -34,34 +37,55 @@ class CatalogViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val response = repository.createProduct(newProduct)
-                // Aquí podrías mostrar un mensaje de éxito: "Producto guardado con ID ${response.id}"
+                notificationHelper.sendInteractiveNotification(
+                    "¡Éxito!",
+                    "Producto ${response.title} guardado correctamente",
+                    response.id
+                )
+                loadProducts()
             } catch (e: Exception) {
-                // Manejar error
+                showErrorNotification(e.message)
             }
         }
     }
 
-    // Función para Actualizar
     fun editProduct(id: Int, updatedProduct: Product) {
         viewModelScope.launch {
             try {
                 val response = repository.updateProduct(id, updatedProduct)
-                // La API devuelve el objeto actualizado para confirmar
+                notificationHelper.sendStatusNotification(
+                    "Producto Actualizado",
+                    "Se actualizó correctamente: ${response.title}",
+                    0xFF4CAF50.toInt()
+                )
+                loadProducts()
             } catch (e: Exception) {
-                // Manejar error
+                showErrorNotification(e.message)
             }
         }
     }
 
-    // Función para Eliminar
     fun removeProduct(id: Int) {
         viewModelScope.launch {
             try {
-                val deletedProduct = repository.deleteProduct(id)
-                // Aquí podrías actualizar tu lista local para quitar el producto visualmente
+                repository.deleteProduct(id)
+                notificationHelper.sendStatusNotification(
+                    "Eliminado",
+                    "Se ha eliminado el producto con ID: $id",
+                    0xFF2196F3.toInt()
+                )
+                loadProducts()
             } catch (e: Exception) {
-                // Manejar error
+                showErrorNotification(e.message)
             }
         }
+    }
+
+    private fun showErrorNotification(error: String?) {
+        notificationHelper.sendStatusNotification(
+            "Error en Operación",
+            error ?: "Fallo desconocido",
+            0xFFF44336.toInt()
+        )
     }
 }

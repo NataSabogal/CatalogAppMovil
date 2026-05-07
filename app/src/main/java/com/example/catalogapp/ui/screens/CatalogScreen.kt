@@ -1,5 +1,10 @@
 package com.example.catalogapp.ui.screens
 
+import android.content.Intent
+import android.os.Build
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -13,16 +18,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,6 +30,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -40,8 +38,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.catalogapp.model.Product
+import com.example.catalogapp.services.DownloadService
 import com.example.catalogapp.ui.theme.*
-
+import kotlinx.coroutines.launch
 
 private val sampleProducts = listOf(
     Product(1, "Oak Lounge Chair",   840.00,  "Minimalist lounge chair in solid oak.",       "Furniture"),
@@ -63,7 +62,6 @@ private val productImageUrls = mapOf(
     6 to "https://images.unsplash.com/photo-1530018607912-eff2daa1bac4?w=400",
 )
 
-// Brand labels per product (mimics the prototype's brand/collection tag)
 private val productBrands = mapOf(
     1 to "MÉRIDIAN",
     2 to "LUMIÈRE",
@@ -73,10 +71,6 @@ private val productBrands = mapOf(
     6 to "HØYRE",
 )
 
-// ──────────────────────────────────────────────
-//  Screen
-// ──────────────────────────────────────────────
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CatalogScreen(
@@ -85,6 +79,34 @@ fun CatalogScreen(
     onCartClick: () -> Unit = {},
     onAddToCart: (Int) -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            val intent = Intent(context, DownloadService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        } else {
+            Toast.makeText(context, "Permiso de notificaciones denegado", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            val intent = Intent(context, DownloadService::class.java)
+            context.startService(intent)
+        }
+    }
+
     var selectedCategory by remember { mutableStateOf("All") }
     var selectedNavItem  by remember { mutableIntStateOf(1) } // 1 = Catalog
     var searchQuery      by remember { mutableStateOf("") }
@@ -98,6 +120,7 @@ fun CatalogScreen(
         containerColor = BoutiqueBackground,
         topBar    = { CatalogTopBar(onMenuClick = {}, onCartClick = onCartClick) },
         bottomBar = { CatalogBottomBar(selectedNavItem) { selectedNavItem = it } },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
 
         LazyVerticalGrid(
@@ -113,7 +136,6 @@ fun CatalogScreen(
             modifier = Modifier.fillMaxSize(),
         ) {
 
-            // ── Search bar ──────────────────────────────
             item(span = { GridItemSpan(maxLineSpan) }) {
                 SearchBar(
                     query    = searchQuery,
@@ -124,7 +146,6 @@ fun CatalogScreen(
                 )
             }
 
-            // ── Category chips ──────────────────────────
             item(span = { GridItemSpan(maxLineSpan) }) {
                 CategoryChipRow(
                     categories       = categories,
@@ -133,23 +154,26 @@ fun CatalogScreen(
                 )
             }
 
-            // ── Product cards ───────────────────────────
             items(filteredProducts) { product ->
                 ProductCard(
                     product  = product,
                     imageUrl = productImageUrls[product.id] ?: "",
                     brand    = productBrands[product.id]    ?: "",
                     onClick  = { onProductClick(product) },
-                    onAddToCart = { onAddToCart(product.id) }
+                    onAddToCart = {
+                        onAddToCart(product.id)
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                message = "¡${product.title} añadido al carrito!",
+                                duration = SnackbarDuration.Short
+                            )
+                        }
+                    }
                 )
             }
         }
     }
 }
-
-// ──────────────────────────────────────────────
-//  Top App Bar
-// ──────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -199,10 +223,6 @@ private fun CatalogTopBar(
     )
 }
 
-// ──────────────────────────────────────────────
-//  Search Bar
-// ──────────────────────────────────────────────
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SearchBar(
@@ -240,10 +260,6 @@ private fun SearchBar(
         modifier = modifier.height(50.dp),
     )
 }
-
-// ──────────────────────────────────────────────
-//  Category chip row
-// ──────────────────────────────────────────────
 
 @Composable
 private fun CategoryChipRow(
@@ -303,7 +319,7 @@ fun ProductCard(
     imageUrl: String,
     brand: String,
     onClick: () -> Unit,
-    onAddToCart: () -> Unit = {},   // ✅ NUEVO
+    onAddToCart: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var isFavorite by remember { mutableStateOf(false) }
@@ -312,7 +328,6 @@ fun ProductCard(
         animationSpec = tween(150),
         label         = "heartScale",
     )
-    // ✅ Estado para mostrar confirmación
     var addedToCart by remember { mutableStateOf(false) }
 
     Column(
@@ -324,7 +339,6 @@ fun ProductCard(
                 onClick           = onClick,
             ),
     ) {
-        // ── Imagen con botón favorito ────────────────────────────────────
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -352,7 +366,6 @@ fun ProductCard(
                     ),
             )
 
-            // Botón corazón
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -376,7 +389,6 @@ fun ProductCard(
                 )
             }
 
-            // ✅ Botón "+" agregar al carrito (esquina inferior derecha)
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
@@ -490,10 +502,6 @@ private fun CatalogBottomBar(
         }
     }
 }
-
-// ──────────────────────────────────────────────
-//  Preview
-// ──────────────────────────────────────────────
 
 @Preview(showBackground = true, backgroundColor = 0xFFF9F7F7, showSystemUi = true)
 @Composable

@@ -1,11 +1,13 @@
 package com.example.catalogapp.viewmodel
 
+import android.app.Application
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.catalogapp.data.network.NotificationHelper
 import com.example.catalogapp.data.network.RetrofitClient
 import com.example.catalogapp.data.repository.CartRepository
 import com.example.catalogapp.model.CartItemUi
@@ -19,12 +21,13 @@ sealed interface CartState {
     object Empty : CartState
 }
 
-class CartViewModel : ViewModel() {
+class CartViewModel(application: Application) : AndroidViewModel(application) {
 
     var state: CartState by mutableStateOf(CartState.Empty)
         private set
 
     private val currentUserId = 1
+    private val notificationHelper = NotificationHelper(application)
 
     private val repository = CartRepository(
         cartApi    = RetrofitClient.cartApiService,
@@ -65,6 +68,7 @@ class CartViewModel : ViewModel() {
                 )
             } catch (e: Exception) {
                 state = CartState.Success(localItems.toList())
+                // Opcional: Notificar si falló el guardado en servidor
             }
         }
     }
@@ -87,6 +91,17 @@ class CartViewModel : ViewModel() {
     fun clearCart() {
         localItems.clear()
         state = CartState.Empty
+    }
+
+    fun checkout() {
+        if (localItems.isNotEmpty()) {
+            notificationHelper.sendStatusNotification(
+                "¡Pedido Confirmado!",
+                "Gracias por tu compra. Estamos preparando tu envío.",
+                0xFF4CAF50.toInt()
+            )
+            clearCart()
+        }
     }
 
     fun getSubtotal(): Double = localItems.sumOf { it.price * it.quantity }
